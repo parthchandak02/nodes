@@ -42,7 +42,7 @@ single HTML file with no libraries.
 | `dob.age` | Node size: age 18 to 70 maps to a 6 to 24 px radius |
 | `gender` | Node shape: circle for male, square for female |
 | `location.country` | Starting position: countries are spaced around a ring, with a faint label at each group |
-| `name.first` + `dob.age` | The label under every node |
+| `name.first` + `dob.age` | The label beside every node, usually under it, moved when it would collide with another |
 
 Springs pull linked nodes toward a 120 px rest length, every pair repels (inverse square),
 and a weak pull keeps the whole network centred. 40 physics steps run before the first frame
