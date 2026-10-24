@@ -319,11 +319,77 @@ function drawNode(n, isFlash) {
   }
   ctx.restore();
 
-  ctx.font = `${10 + (radius > 14 ? 1 : 0)}px system-ui, sans-serif`;
-  ctx.fillStyle = `rgba(255,255,255,${C.alphaHierarchy.label})`;
+}
+
+// ── LABEL LAYOUT ── greedy placement so names and country tags don't overlap
+// each other or the nodes. Tries a few spots per label and keeps the first free one.
+function boxesHit(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function nodeBox(n) {
+  const h = n.user.gender === 'male' ? n.radius : n.radius * 0.8;
+  return { x: n.x - h, y: n.y - h, w: h * 2, h: h * 2 };
+}
+
+function placeLabel(text, font, candidates, taken) {
+  ctx.font = font;
+  const w = ctx.measureText(text).width + 4, h = 12;
+  let best = null, bestHits = Infinity;
+  for (const [cx, cy] of candidates) {
+    const box = { x: cx - w / 2, y: cy - h / 2, w, h };
+    const hits = taken.filter(t => boxesHit(box, t)).length;
+    if (hits < bestHits) { best = box; bestHits = hits; }
+    if (hits === 0) break;
+  }
+  taken.push(best);
+  return { x: best.x + best.w / 2, y: best.y + best.h / 2 };
+}
+
+function drawLabels() {
+  const taken = nodes.map(nodeBox);
+  const hero = document.getElementById('hero').getBoundingClientRect();
+  taken.push({ x: hero.left, y: hero.top, w: hero.width, h: hero.height });
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText(`${user.name.first} ${user.dob.age}`, x, y + radius + 4);
+  ctx.textBaseline = 'middle';
+
+  for (const n of nodes) {
+    const half = nodeBox(n).w / 2;
+    const font = `${10 + (n.radius > 14 ? 1 : 0)}px system-ui, sans-serif`;
+    const text = `${n.user.name.first} ${n.user.dob.age}`;
+    const tw = (ctx.font = font, ctx.measureText(text).width);
+    const pos = placeLabel(text, font, [
+      [n.x, n.y + half + 10], [n.x, n.y - half - 10],
+      [n.x + half + tw / 2 + 8, n.y], [n.x - half - tw / 2 - 8, n.y],
+      [n.x, n.y + half + 24], [n.x, n.y - half - 24],
+    ], taken);
+    ctx.font = font;
+    ctx.fillStyle = `rgba(255,255,255,${C.alphaHierarchy.label})`;
+    ctx.fillText(text, pos.x, pos.y);
+  }
+
+  for (const country of Object.keys(countryCenters)) {
+    const members = nodes.filter(n => n.user.location.country === country);
+    if (!members.length) continue;
+    let sx = 0, top = Infinity, bottom = -Infinity;
+    for (const m of members) {
+      sx += m.x;
+      const b = nodeBox(m);
+      top = Math.min(top, b.y);
+      bottom = Math.max(bottom, b.y + b.h);
+    }
+    const cx = sx / members.length;
+    const font = '9px system-ui, sans-serif';
+    const tw = (ctx.font = font, ctx.measureText(country).width);
+    const pos = placeLabel(country, font, [
+      [cx, top - 10], [cx, top - 24], [cx, bottom + 24], [cx, bottom + 38], [cx, top - 38],
+      [cx - tw / 2 - 30, top - 10], [cx + tw / 2 + 30, top - 10],
+      [cx - tw / 2 - 30, bottom + 10], [cx + tw / 2 + 30, bottom + 10],
+    ], taken);
+    ctx.font = font;
+    ctx.fillStyle = `rgba(158,158,158,${C.alphaHierarchy.bg + 0.17})`;
+    ctx.fillText(country, pos.x, pos.y);
+  }
 }
 
 function draw() {
@@ -349,19 +415,6 @@ function draw() {
     ctx.stroke();
   }
 
-  for (const country of Object.keys(countryCenters)) {
-    const members = nodes.filter(n => n.user.location.country === country);
-    if (!members.length) continue;
-    let sx = 0, sy = 0;
-    for (const m of members) { sx += m.x; sy += m.y; }
-    const cx = sx / members.length, cy = sy / members.length;
-    ctx.font = '9px system-ui, sans-serif';
-    ctx.fillStyle = `rgba(158,158,158,${C.alphaHierarchy.bg + 0.05})`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(country, cx, cy - 22);
-  }
-
   const now = performance.now();
   const flashActive = flashNode && (now - flashStart) < C.flashDuration;
 
@@ -369,6 +422,7 @@ function draw() {
     const isFlash = flashActive && n === flashNode;
     drawNode(n, isFlash);
   }
+  drawLabels();
 }
 
 function updateStamp() {
